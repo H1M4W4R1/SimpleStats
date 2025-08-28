@@ -1,4 +1,5 @@
 ﻿using JetBrains.Annotations;
+using Systems.SimpleCore.Automation.Attributes;
 using Systems.SimpleStats.Data.Collections;
 using UnityEngine;
 
@@ -7,12 +8,13 @@ namespace Systems.SimpleStats.Data.Statistics
     /// <summary>
     ///     Base statistic to implement modifiers
     /// </summary>
+    [AutoCreatedObject("Statistics", StatsDatabase.LABEL)]
     public abstract class StatisticBase : ScriptableObject
     {
         /// <summary>
         ///     Base value of statistic, can be modified by modifiers
         /// </summary>
-        [field: SerializeField] public float BaseValue { get; private set; } = 1;
+        [field: SerializeField] public virtual float BaseValue { get; private set; } = 1;
 
         /// <summary>
         ///     Get final value of statistic with modifiers
