@@ -14,7 +14,7 @@ namespace Systems.SimpleStats.Data.Statistics
         /// <summary>
         ///     Base value of statistic, can be modified by modifiers
         /// </summary>
-        [field: SerializeField] public virtual float BaseValue { get; private set; } = 1;
+        [field: SerializeField] public float BaseValue { get; private set; } = 1;
 
         /// <summary>
         ///     Get final value of statistic with modifiers
