@@ -25,7 +25,7 @@ namespace Systems.SimpleStats.Utility
             StatModifierCollection modifierCollection = new(obj.GetAllModifiersFor<TStatisticType>());
             
             // Get statistic
-            TStatisticType statistic = StatsDatabase.GetStatistic<TStatisticType>();
+            TStatisticType statistic = StatsDatabase.Get<TStatisticType>();
             Assert.IsNotNull(statistic);
             
             // Perform calculation

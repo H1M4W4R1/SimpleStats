@@ -16,7 +16,7 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         ///     Gets statistic for modifier
         /// </summary>
         /// <returns>Statistic or null if not found</returns>
-        StatisticBase IStatModifier.GetStatistic() => StatsDatabase.GetStatistic<TStatisticType>();
+        StatisticBase IStatModifier.GetStatistic() => StatsDatabase.Get<TStatisticType>();
 
         bool IStatModifier.IsValidFor(StatisticBase statistic) => statistic is TStatisticType;
 

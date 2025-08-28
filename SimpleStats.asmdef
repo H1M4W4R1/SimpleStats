@@ -6,7 +6,8 @@
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Mathematics",
-        "Unity.ResourceManager"
+        "Unity.ResourceManager",
+        "SimpleCore"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
