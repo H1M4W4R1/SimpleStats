@@ -63,7 +63,7 @@ namespace Systems.SimpleStats.Data
             OnItemsLoadComplete(request);
         }
 
-        private static void OnItemsLoadComplete(AsyncOperationHandle<IList<StatisticBase>> obj)
+        private static void OnItemsLoadComplete(AsyncOperationHandle<IList<StatisticBase>> _)
         {
             _isLoaded = true;
             _isLoading = false;
@@ -79,17 +79,17 @@ namespace Systems.SimpleStats.Data
         /// <summary>
         ///     Gets first object of specified type
         /// </summary>
-        /// <typeparam name="TStatisiticType">Object type to get </typeparam>
+        /// <typeparam name="TStatisticType">Object type to get </typeparam>
         /// <returns>First object of specified type or null if no object of specified type is found</returns>
-        [CanBeNull] public static TStatisiticType GetStatistic<TStatisiticType>()
-            where TStatisiticType : StatisticBase
+        [CanBeNull] public static TStatisticType GetStatistic<TStatisticType>()
+            where TStatisticType : StatisticBase
         {
             EnsureLoaded();
 
             // Loop through all items
             for (int i = 0; i < _items.Count; i++)
             {
-                if (_items[i] is TStatisiticType item) return item;
+                if (_items[i] is TStatisticType item) return item;
             }
 
             Assert.IsNotNull(null, "Item not found in database");
@@ -99,19 +99,19 @@ namespace Systems.SimpleStats.Data
         /// <summary>
         ///     Gets all objects of specified type
         /// </summary>
-        /// <typeparam name="TStatisiticType">Type of object to get</typeparam>
+        /// <typeparam name="TStatisticType">Type of object to get</typeparam>
         /// <returns>Read-only list of objects of specified type</returns>
-        [NotNull] public static IReadOnlyList<TStatisiticType> GetAllStatistics<TStatisiticType>()
-            where TStatisiticType : StatisticBase
+        [NotNull] public static IReadOnlyList<TStatisticType> GetAll<TStatisticType>()
+            where TStatisticType : StatisticBase
         {
             EnsureLoaded();
 
-            List<TStatisiticType> items = new();
+            List<TStatisticType> items = new();
 
             // Loop through all items
             for (int i = 0; i < _items.Count; i++)
             {
-                if (_items[i] is TStatisiticType item) items.Add(item);
+                if (_items[i] is TStatisticType item) items.Add(item);
             }
 
             return items;

@@ -23,16 +23,48 @@ namespace Systems.SimpleStats.Abstract
         /// <summary>
         ///     Get modifiers for statistic
         /// </summary>
+        /// <param name="statistic">Statistic to get modifiers for</param>
+        /// <returns>Read-only list of modifiers</returns>
+        [ItemNotNull] public IEnumerable<IStatModifier> GetAllModifiersFor(StatisticBase statistic)
+        {
+            // Get all modifiers
+            IReadOnlyList<IStatModifier> statModifiers = GetAllModifiers();
+            
+            // Loop through modifiers and yield return only those that are of type TStatisticType
+            for (int index = 0; index < statModifiers.Count; index++)
+            {
+                IStatModifier modifier = statModifiers[index];
+                if (!modifier.IsValidFor(statistic)) continue;
+                yield return modifier;
+            }
+        }
+        
+        /// <summary>
+        ///     Get modifiers for statistic
+        /// </summary>
         /// <typeparam name="TStatisticType">Statistic type</typeparam>
         /// <returns>Read-only list of modifiers</returns>
-        public IEnumerable<IStatModifier> GetModifiersFor<TStatisticType>()
-            where TStatisticType : StatisticBase;
+        [ItemNotNull] public IEnumerable<IStatModifier> GetAllModifiersFor<TStatisticType>()
+            where TStatisticType : StatisticBase
+        {
+            // Get all modifiers
+            IReadOnlyList<IStatModifier> statModifiers = GetAllModifiers();
+            
+            // Loop through modifiers and yield return only those that are of type TStatisticType
+            for (int index = 0; index < statModifiers.Count; index++)
+            {
+                IStatModifier modifier = statModifiers[index];
+                if (!modifier.IsValidFor<TStatisticType>()) continue;
+                yield return modifier;
+            }
+        }
         
         /// <summary>
         ///     Get modifiers for statistic and add them to collection
         /// </summary>
         /// <param name="statModifierCollection">Collection to add modifiers to</param>
         /// <typeparam name="TStatisticType">Type of statistic</typeparam>
-        public void TransferModifiersTo<TStatisticType>([NotNull] StatModifierCollection statModifierCollection);
+        public void TransferModifiersTo<TStatisticType>([NotNull] StatModifierCollection statModifierCollection)
+            where TStatisticType : StatisticBase => statModifierCollection.AddRange(GetAllModifiersFor<TStatisticType>());
     }
 }

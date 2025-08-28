@@ -1,4 +1,6 @@
-﻿using Sirenix.Utilities;
+﻿using JetBrains.Annotations;
+using Sirenix.Utilities;
+using Systems.SimpleStats.Data;
 using Systems.SimpleStats.Data.Statistics;
 
 namespace Systems.SimpleStats.Abstract.Modifiers
@@ -7,10 +9,18 @@ namespace Systems.SimpleStats.Abstract.Modifiers
     ///     Stat modifier of provided statistic type
     /// </summary>
     /// <typeparam name="TStatisticType">Type of statistic</typeparam>
-    public interface IStatModifier<TStatisticType> : IStatModifier
+    public interface IStatModifier<out TStatisticType> : IStatModifier
         where TStatisticType : StatisticBase
     {
-        bool IStatModifier.IsFor<TSelectStatisticType>()
+        /// <summary>
+        ///     Gets statistic for modifier
+        /// </summary>
+        /// <returns>Statistic or null if not found</returns>
+        StatisticBase IStatModifier.GetStatistic() => StatsDatabase.GetStatistic<TStatisticType>();
+
+        bool IStatModifier.IsValidFor(StatisticBase statistic) => statistic is TStatisticType;
+
+        bool IStatModifier.IsValidFor<TSelectStatisticType>()
             => typeof(TSelectStatisticType).ImplementsOrInherits(typeof(TStatisticType));
     }
     
@@ -35,6 +45,30 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         /// </summary>
         /// <typeparam name="TStatisticType">Type of statistic</typeparam>
         /// <returns>True if modifier is for provided statistic type</returns>
-        public bool IsFor<TStatisticType>() where TStatisticType : StatisticBase;
+        public bool IsValidFor<TStatisticType>() where TStatisticType : StatisticBase;
+
+        /// <summary>
+        ///     Checks if modifier is for provided statistic
+        /// </summary>
+        /// <param name="statistic">Statistic to check</param>
+        /// <returns>True if modifier is for provided statistic</returns>
+        public bool IsValidFor(StatisticBase statistic);
+        
+        /// <summary>
+        ///     Gets statistic for modifier
+        /// </summary>
+        /// <returns>Statistic or null if not found</returns>
+        [CanBeNull] public StatisticBase GetStatistic();
+
+        /// <summary>
+        ///     Gets statistic for modifier
+        /// </summary>
+        /// <typeparam name="TStatisticType">Cast statistic to this type</typeparam>
+        /// <returns>Found statistic or null if not found</returns>
+        [CanBeNull] public TStatisticType GetStatisticAs<TStatisticType>()
+            where TStatisticType : StatisticBase
+        {
+            return GetStatistic() as TStatisticType;
+        }
     }
 }
