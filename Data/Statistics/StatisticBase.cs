@@ -8,7 +8,7 @@ namespace Systems.SimpleStats.Data.Statistics
     /// <summary>
     ///     Base statistic to implement modifiers
     /// </summary>
-    [AutoCreatedObject("Statistics", StatsDatabase.LABEL)]
+    [AutoCreate("Statistics", StatsDatabase.LABEL)]
     public abstract class StatisticBase : ScriptableObject
     {
         /// <summary>
