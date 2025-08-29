@@ -1,5 +1,4 @@
 ﻿using JetBrains.Annotations;
-using Sirenix.Utilities;
 using Systems.SimpleStats.Data;
 using Systems.SimpleStats.Data.Statistics;
 
@@ -21,7 +20,7 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         bool IStatModifier.IsValidFor(StatisticBase statistic) => statistic is TStatisticType;
 
         bool IStatModifier.IsValidFor<TSelectStatisticType>()
-            => typeof(TSelectStatisticType).ImplementsOrInherits(typeof(TStatisticType));
+            => typeof(TStatisticType).IsAssignableFrom(typeof(TSelectStatisticType));
     }
     
     /// <summary>
