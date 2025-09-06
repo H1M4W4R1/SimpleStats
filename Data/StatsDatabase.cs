@@ -1,5 +1,6 @@
 ﻿using JetBrains.Annotations;
 using Systems.SimpleCore.Storage;
+using Systems.SimpleCore.Storage.Databases;
 using Systems.SimpleStats.Data.Statistics;
 
 namespace Systems.SimpleStats.Data
