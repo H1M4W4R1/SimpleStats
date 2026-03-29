@@ -7,7 +7,9 @@ using UnityEngine;
 namespace Systems.SimpleStats.Implementations
 {
     /// <summary>
-    ///     Multiplies value by given multiplier
+    ///     Multiplies value by given multiplier.
+    ///     Unity cannot serialize open generic types. To use in the Inspector, create a concrete
+    ///     closed subtype (e.g., <c>class HealthMultiply : MultiplyModifier&lt;HealthStat&gt; {}</c>).
     /// </summary>
     [Serializable]
     public sealed class MultiplyModifier<TStatisticType> : IStatModifier<TStatisticType>

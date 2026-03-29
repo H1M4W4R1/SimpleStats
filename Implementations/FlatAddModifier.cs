@@ -7,7 +7,9 @@ using UnityEngine;
 namespace Systems.SimpleStats.Implementations
 {
     /// <summary>
-    ///     Adds value to base value
+    ///     Adds value to base value.
+    ///     Unity cannot serialize open generic types. To use in the Inspector, create a concrete
+    ///     closed subtype (e.g., <c>class HealthFlatAdd : FlatAddModifier&lt;HealthStat&gt; {}</c>).
     /// </summary>
     [Serializable]
     public sealed class FlatAddModifier<TStatisticType> : IStatModifier<TStatisticType>

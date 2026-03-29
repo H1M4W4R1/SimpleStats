@@ -21,50 +21,58 @@ namespace Systems.SimpleStats.Abstract
         public IReadOnlyList<IStatModifier> GetAllModifiers();
 
         /// <summary>
-        ///     Get modifiers for statistic
+        ///     Collects modifiers valid for the given statistic into the output list.
+        ///     Writes directly into the target list to avoid GC allocations from yield return.
         /// </summary>
-        /// <param name="statistic">Statistic to get modifiers for</param>
-        /// <returns>Read-only list of modifiers</returns>
-        [ItemNotNull] public IEnumerable<IStatModifier> GetAllModifiersFor(StatisticBase statistic)
+        /// <param name="statistic">Statistic to filter by</param>
+        /// <param name="output">List to receive matching modifiers</param>
+        public void GetAllModifiersFor(StatisticBase statistic, [NotNull] List<IStatModifier> output)
         {
-            // Get all modifiers
             IReadOnlyList<IStatModifier> statModifiers = GetAllModifiers();
-            
-            // Loop through modifiers and yield return only those that are of type TStatisticType
+
             for (int index = 0; index < statModifiers.Count; index++)
             {
                 IStatModifier modifier = statModifiers[index];
-                if (!modifier.IsValidFor(statistic)) continue;
-                yield return modifier;
+                if (modifier.IsValidFor(statistic))
+                    output.Add(modifier);
             }
         }
-        
+
         /// <summary>
-        ///     Get modifiers for statistic
+        ///     Collects modifiers valid for the given statistic type into the output list.
+        ///     Writes directly into the target list to avoid GC allocations from yield return.
         /// </summary>
         /// <typeparam name="TStatisticType">Statistic type</typeparam>
-        /// <returns>Read-only list of modifiers</returns>
-        [ItemNotNull] public IEnumerable<IStatModifier> GetAllModifiersFor<TStatisticType>()
+        /// <param name="output">List to receive matching modifiers</param>
+        public void GetAllModifiersFor<TStatisticType>([NotNull] List<IStatModifier> output)
             where TStatisticType : StatisticBase
         {
-            // Get all modifiers
             IReadOnlyList<IStatModifier> statModifiers = GetAllModifiers();
-            
-            // Loop through modifiers and yield return only those that are of type TStatisticType
+
             for (int index = 0; index < statModifiers.Count; index++)
             {
                 IStatModifier modifier = statModifiers[index];
-                if (!modifier.IsValidFor<TStatisticType>()) continue;
-                yield return modifier;
+                if (modifier.IsValidFor<TStatisticType>())
+                    output.Add(modifier);
             }
         }
-        
+
         /// <summary>
         ///     Get modifiers for statistic and add them to collection
         /// </summary>
         /// <param name="statModifierCollection">Collection to add modifiers to</param>
         /// <typeparam name="TStatisticType">Type of statistic</typeparam>
         public void TransferModifiersTo<TStatisticType>([NotNull] StatModifierCollection statModifierCollection)
-            where TStatisticType : StatisticBase => statModifierCollection.AddRange(GetAllModifiersFor<TStatisticType>());
+            where TStatisticType : StatisticBase
+        {
+            IReadOnlyList<IStatModifier> statModifiers = GetAllModifiers();
+
+            for (int index = 0; index < statModifiers.Count; index++)
+            {
+                IStatModifier modifier = statModifiers[index];
+                if (modifier.IsValidFor<TStatisticType>())
+                    statModifierCollection.Add(modifier);
+            }
+        }
     }
 }

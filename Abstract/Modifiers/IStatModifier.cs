@@ -19,6 +19,12 @@ namespace Systems.SimpleStats.Abstract.Modifiers
 
         bool IStatModifier.IsValidFor(StatisticBase statistic) => statistic is TStatisticType;
 
+        /// <summary>
+        ///     Returns true when <typeparamref name="TSelectStatisticType"/> is
+        ///     <typeparamref name="TStatisticType"/> or a subclass of it.
+        ///     This means a modifier targeting <c>HealthStat</c> will match queries for
+        ///     <c>HealthStat</c> and any type deriving from it, but NOT for its base types.
+        /// </summary>
         bool IStatModifier.IsValidFor<TSelectStatisticType>()
             => typeof(TStatisticType).IsAssignableFrom(typeof(TSelectStatisticType));
     }
@@ -64,10 +70,16 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         /// </summary>
         /// <typeparam name="TStatisticType">Cast statistic to this type</typeparam>
         /// <returns>Found statistic or null if not found</returns>
+        /// <summary>
+        ///     Gets statistic for modifier, cast to the specified type.
+        ///     Returns null if the statistic is not found or cannot be cast.
+        /// </summary>
         [CanBeNull] public TStatisticType GetStatisticAs<TStatisticType>()
             where TStatisticType : StatisticBase
         {
-            return GetStatistic() as TStatisticType;
+            StatisticBase statistic = GetStatistic();
+            if (statistic == null) return null;
+            return statistic as TStatisticType;
         }
     }
 }

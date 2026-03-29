@@ -5,10 +5,19 @@ using Systems.SimpleStats.Abstract.Modifiers;
 namespace Systems.SimpleStats.Data.Collections
 {
     /// <summary>
-    ///     Collection of stat modifiers
+    ///     Collection of stat modifiers.
+    ///     Note: This collection is not thread-safe. If modifiers are added/removed from one thread
+    ///     while Apply iterates on another, the internal list may throw or produce corrupt results.
+    ///     Callers must synchronize externally if concurrent access is needed.
     /// </summary>
     public sealed class StatModifierCollection
     {
+        /// <summary>
+        ///     Cached comparer to avoid delegate allocation on every sort
+        /// </summary>
+        private static readonly IComparer<IStatModifier> OrderComparer =
+            Comparer<IStatModifier>.Create((a, b) => a.Order.CompareTo(b.Order));
+
         /// <summary>
         ///     Internal modifier storage
         /// </summary>
@@ -28,7 +37,7 @@ namespace Systems.SimpleStats.Data.Collections
             // Sort if necessary
             if (!_isSorted)
             {
-                _modifiers.Sort((a, b) => a.Order.CompareTo(b.Order));
+                _modifiers.Sort(OrderComparer);
                 _isSorted = true;
             }
             
@@ -44,8 +53,9 @@ namespace Systems.SimpleStats.Data.Collections
         ///     Add modifier to collection
         /// </summary>
         /// <param name="modifier">Modifier to add</param>
-        public void Add([NotNull] IStatModifier modifier)
+        public void Add([CanBeNull] IStatModifier modifier)
         {
+            if (ReferenceEquals(modifier, null)) return;
             _modifiers.Add(modifier);
             _isSorted = false;
         }
@@ -53,15 +63,26 @@ namespace Systems.SimpleStats.Data.Collections
         /// <summary>
         ///     Remove modifier from collection
         /// </summary>
-        public void Remove([NotNull] IStatModifier modifier)
+        /// <returns>True if modifier was found and removed, false otherwise</returns>
+        public bool Remove([CanBeNull] IStatModifier modifier)
         {
-            _modifiers.Remove(modifier);
+            if (ReferenceEquals(modifier, null)) return false;
+            return _modifiers.Remove(modifier);
         }
 
         /// <summary>
         ///     Count of modifiers
         /// </summary>
         public int Count => _modifiers.Count;
+
+        /// <summary>
+        ///     Clear all modifiers from collection
+        /// </summary>
+        public void Clear()
+        {
+            _modifiers.Clear();
+            _isSorted = true;
+        }
 
         /// <summary>
         ///     Add range of modifiers to collection
@@ -77,7 +98,11 @@ namespace Systems.SimpleStats.Data.Collections
             // Default constructor
         }
 
-        // Copy constructor
+        /// <summary>
+        ///     Copy constructor. Note: <see cref="_isSorted"/> is initialized to <c>true</c> by
+        ///     the field initializer, but <see cref="AddRange"/> sets it to <c>false</c>.
+        ///     If AddRange is ever removed from this constructor, _isSorted must be set explicitly.
+        /// </summary>
         public StatModifierCollection([NotNull] IEnumerable<IStatModifier> modifiers)
         {
             AddRange(modifiers);
