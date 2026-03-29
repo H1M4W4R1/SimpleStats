@@ -78,7 +78,7 @@ namespace Systems.SimpleStats.Abstract.Modifiers
             where TStatisticType : StatisticBase
         {
             StatisticBase statistic = GetStatistic();
-            if (statistic == null) return null;
+            if (ReferenceEquals(statistic, null)) return null;
             return statistic as TStatisticType;
         }
     }

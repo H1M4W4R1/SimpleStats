@@ -17,6 +17,15 @@ namespace Systems.SimpleStats.Data.Statistics
         [field: SerializeField] public float BaseValue { get; protected internal set; } = 1;
 
         /// <summary>
+        ///     This method is used to clamp final stat value into valid range to provide ability to
+        ///     limit stat values into desired ranges that won't break game systems.
+        /// </summary>
+        public virtual float GetFinalClampedValue(float value)
+        {
+            return value;
+        }
+        
+        /// <summary>
         ///     Get final value of statistic with modifiers
         /// </summary>
         /// <param name="modifiers">Modifiers to apply</param>
@@ -25,6 +34,7 @@ namespace Systems.SimpleStats.Data.Statistics
         {
             float result = BaseValue;
             modifiers.Apply(ref result);
+            result = GetFinalClampedValue(result);
             return result;
         }
     }
