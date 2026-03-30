@@ -15,15 +15,17 @@ namespace Systems.SimpleStats.Implementations
     public sealed class FlatAddModifier<TStatisticType> : IStatModifier<TStatisticType>
         where TStatisticType : StatisticBase
     {
-        public FlatAddModifier(float value)
+        public FlatAddModifier(float baseValue)
         {
-            Value = value;
+            BaseValue = baseValue;
         }
 
-        [field: SerializeField] public float Value { get; private set; }
+        [field: SerializeField] public float BaseValue { get; private set; }
+        
+        public float GetValue() => BaseValue;
         
         public int Order => (int) ModifierOrder.FlatAdd;
         
-        public void Apply(ref float currentFloat) => currentFloat += Value;
+        public void Apply(ref float currentFloat) => currentFloat += GetValue();
     }
 }

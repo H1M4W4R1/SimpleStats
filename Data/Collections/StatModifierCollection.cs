@@ -1,16 +1,23 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using JetBrains.Annotations;
+using Systems.SimpleCore.Operations;
+using Systems.SimpleCore.Timing;
+using Systems.SimpleCore.Utility.Enums;
+using Systems.SimpleStats.Abstract;
 using Systems.SimpleStats.Abstract.Modifiers;
+using Systems.SimpleStats.Operations;
 
 namespace Systems.SimpleStats.Data.Collections
 {
     /// <summary>
-    ///     Collection of stat modifiers.
-    ///     Note: This collection is not thread-safe. If modifiers are added/removed from one thread
-    ///     while Apply iterates on another, the internal list may throw or produce corrupt results.
-    ///     Callers must synchronize externally if concurrent access is needed.
+    ///     Collection of stat modifiers with validation, events, timed modifier support,
+    ///     and per-tick debounced recalculation via TickSystem.
+    ///     Events and validation are delegated to the <see cref="IWithStatModifiers"/> owner.
+    ///     Note: This collection is not thread-safe. Callers must synchronize externally
+    ///     if concurrent access is needed.
     /// </summary>
-    public sealed class StatModifierCollection
+    public sealed class StatModifierCollection : IDisposable
     {
         /// <summary>
         ///     Cached comparer to avoid delegate allocation on every sort
@@ -24,56 +31,200 @@ namespace Systems.SimpleStats.Data.Collections
         private readonly List<IStatModifier> _modifiers = new List<IStatModifier>();
 
         /// <summary>
+        ///     Owner of this modifier collection, receives events and validation calls
+        /// </summary>
+        [CanBeNull] private readonly IWithStatModifiers _owner;
+
+        /// <summary>
         ///     True if modifiers are sorted
         /// </summary>
         private bool _isSorted = true;
-        
+
         /// <summary>
-        ///     Apply all modifiers to statistic value
+        ///     Dirty flag for debounced recalculation
+        /// </summary>
+        private bool _isDirty;
+
+        /// <summary>
+        ///     Whether this collection is subscribed to TickSystem
+        /// </summary>
+        private bool _isTickRegistered;
+
+        /// <summary>
+        ///     Whether this collection has been disposed
+        /// </summary>
+        private bool _isDisposed;
+
+        public StatModifierCollection()
+        {
+            RegisterTick();
+        }
+
+        /// <summary>
+        ///     Creates a collection with an owner for context-aware operations.
+        ///     The owner receives all events and validation calls.
+        /// </summary>
+        public StatModifierCollection([CanBeNull] IWithStatModifiers owner)
+        {
+            _owner = owner;
+            RegisterTick();
+        }
+
+        /// <summary>
+        ///     Copy constructor
+        /// </summary>
+        public StatModifierCollection([NotNull] IEnumerable<IStatModifier> modifiers,
+            [CanBeNull] IWithStatModifiers owner = null)
+        {
+            _owner = owner;
+            _modifiers.AddRange(modifiers);
+            _isSorted = false;
+            RegisterTick();
+        }
+
+        /// <summary>
+        ///     Count of modifiers in the collection
+        /// </summary>
+        public int Count => _modifiers.Count;
+
+        /// <summary>
+        ///     Read-only access to internal modifiers
+        /// </summary>
+        public IReadOnlyList<IStatModifier> Modifiers => _modifiers;
+
+        /// <summary>
+        ///     Apply all modifiers to statistic value.
+        ///     Conditional modifiers that return false from ShouldApply are skipped.
         /// </summary>
         /// <param name="currentFloat">Current statistic value</param>
         public void Apply(ref float currentFloat)
         {
-            // Sort if necessary
-            if (!_isSorted)
-            {
-                _modifiers.Sort(OrderComparer);
-                _isSorted = true;
-            }
-            
-            // Apply modifiers in order
+            EnsureSorted();
+
             for (int index = 0; index < _modifiers.Count; index++)
             {
                 IStatModifier modifier = _modifiers[index];
+
+                if (modifier is IConditionalModifier conditional)
+                {
+                    ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                    if (!conditional.ShouldApply(in context))
+                        continue;
+                }
+
                 modifier.Apply(ref currentFloat);
             }
         }
 
         /// <summary>
-        ///     Add modifier to collection
+        ///     Add modifier with full three-phase validation.
+        ///     Phase 1: Parameter validation (null, expired).
+        ///     Phase 2: Business logic via <see cref="IWithStatModifiers.CanApplyModifier"/>.
+        ///     Phase 3: Event dispatch on success/failure.
         /// </summary>
-        /// <param name="modifier">Modifier to add</param>
+        public OperationResult TryAddModifier(
+            [CanBeNull] IStatModifier modifier,
+            ActionSource actionSource = ActionSource.External)
+        {
+            // Phase 1: Parameter validation
+            if (ReferenceEquals(modifier, null))
+                return ModifierOperations.ModifierIsNull();
+
+            if (modifier is ITimedModifier timed && timed.IsExpired)
+            {
+                OperationResult expired = ModifierOperations.ModifierExpired();
+                if (actionSource == ActionSource.External && _owner != null)
+                {
+                    ModifierContext expiredContext = new ModifierContext(modifier, _owner, actionSource);
+                    _owner.OnModifierAddFailed(in expiredContext, in expired);
+                }
+                return expired;
+            }
+
+            ModifierContext context = new ModifierContext(modifier, _owner, actionSource);
+
+            // Phase 2: Business logic validation (delegated to owner)
+            if (_owner != null)
+            {
+                OperationResult canApply = _owner.CanApplyModifier(in context);
+                if (!canApply)
+                {
+                    if (actionSource == ActionSource.External)
+                        _owner.OnModifierAddFailed(in context, in canApply);
+                    return canApply;
+                }
+            }
+
+            // Execute
+            _modifiers.Add(modifier);
+            _isSorted = false;
+            MarkDirty();
+
+            OperationResult result = ModifierOperations.ModifierAdded();
+
+            // Phase 3: Events
+            if (actionSource == ActionSource.External && _owner != null)
+                _owner.OnModifierAdded(in context, in result);
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Remove modifier with validation and events
+        /// </summary>
+        public OperationResult TryRemoveModifier(
+            [CanBeNull] IStatModifier modifier,
+            ActionSource actionSource = ActionSource.External)
+        {
+            // Phase 1: Parameter validation
+            if (ReferenceEquals(modifier, null))
+                return ModifierOperations.ModifierIsNull();
+
+            ModifierContext context = new ModifierContext(modifier, _owner, actionSource);
+
+            // Execute
+            if (!_modifiers.Remove(modifier))
+            {
+                OperationResult notFound = ModifierOperations.ModifierNotFound();
+                if (actionSource == ActionSource.External && _owner != null)
+                    _owner.OnModifierRemoveFailed(in context, in notFound);
+                return notFound;
+            }
+
+            MarkDirty();
+
+            OperationResult result = ModifierOperations.ModifierRemoved();
+
+            // Phase 3: Events
+            if (actionSource == ActionSource.External && _owner != null)
+                _owner.OnModifierRemoved(in context, in result);
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Add modifier without validation (legacy compatibility).
+        ///     Prefer <see cref="TryAddModifier"/> for new code.
+        /// </summary>
         public void Add([CanBeNull] IStatModifier modifier)
         {
             if (ReferenceEquals(modifier, null)) return;
             _modifiers.Add(modifier);
             _isSorted = false;
+            MarkDirty();
         }
 
         /// <summary>
-        ///     Remove modifier from collection
+        ///     Remove modifier without events (legacy compatibility).
+        ///     Prefer <see cref="TryRemoveModifier"/> for new code.
         /// </summary>
-        /// <returns>True if modifier was found and removed, false otherwise</returns>
         public bool Remove([CanBeNull] IStatModifier modifier)
         {
             if (ReferenceEquals(modifier, null)) return false;
-            return _modifiers.Remove(modifier);
+            bool removed = _modifiers.Remove(modifier);
+            if (removed) MarkDirty();
+            return removed;
         }
-
-        /// <summary>
-        ///     Count of modifiers
-        /// </summary>
-        public int Count => _modifiers.Count;
 
         /// <summary>
         ///     Clear all modifiers from collection
@@ -82,6 +233,7 @@ namespace Systems.SimpleStats.Data.Collections
         {
             _modifiers.Clear();
             _isSorted = true;
+            MarkDirty();
         }
 
         /// <summary>
@@ -91,21 +243,118 @@ namespace Systems.SimpleStats.Data.Collections
         {
             _modifiers.AddRange(modifiers);
             _isSorted = false;
-        }
-
-        public StatModifierCollection()
-        {
-            // Default constructor
+            MarkDirty();
         }
 
         /// <summary>
-        ///     Copy constructor. Note: <see cref="_isSorted"/> is initialized to <c>true</c> by
-        ///     the field initializer, but <see cref="AddRange"/> sets it to <c>false</c>.
-        ///     If AddRange is ever removed from this constructor, _isSorted must be set explicitly.
+        ///     Recalculates active modifiers: removes expired timed modifiers,
+        ///     clears the dirty flag. Called automatically by TickSystem when dirty.
         /// </summary>
-        public StatModifierCollection([NotNull] IEnumerable<IStatModifier> modifiers)
+        public OperationResult RecomputeAllModifiers()
         {
-            AddRange(modifiers);
+            // Remove expired timed modifiers (iterate backwards for safe removal)
+            for (int i = _modifiers.Count - 1; i >= 0; i--)
+            {
+                if (_modifiers[i] is not ITimedModifier {IsExpired: true}) continue;
+                
+                IStatModifier modifier = _modifiers[i];
+                _modifiers.RemoveAt(i);
+
+                if (_owner == null) continue;
+                ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                OperationResult expiredResult = ModifierOperations.ModifierRemoved();
+                _owner.OnModifierExpired(in context, in expiredResult);
+            }
+
+            _isDirty = false;
+
+            OperationResult result = ModifierOperations.RecomputeComplete();
+            _owner?.OnRecomputeComplete(in result);
+            return result;
         }
+
+        /// <summary>
+        ///     Collects modifiers that are currently active (not expired, conditions met)
+        /// </summary>
+        public void GetActiveModifiers([NotNull] List<IStatModifier> output)
+        {
+            for (int i = 0; i < _modifiers.Count; i++)
+            {
+                IStatModifier modifier = _modifiers[i];
+
+                if (modifier is ITimedModifier { IsExpired: true })
+                    continue;
+
+                if (modifier is IConditionalModifier conditional)
+                {
+                    ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                    if (!conditional.ShouldApply(in context))
+                        continue;
+                }
+
+                output.Add(modifier);
+            }
+        }
+
+        #region TickSystem Integration
+
+        private void RegisterTick()
+        {
+            if (_isTickRegistered) return;
+            TickSystem.OnTick += OnTick;
+            _isTickRegistered = true;
+        }
+
+        private void UnregisterTick()
+        {
+            if (!_isTickRegistered) return;
+            TickSystem.OnTick -= OnTick;
+            _isTickRegistered = false;
+        }
+
+        private void OnTick(float deltaTimeSeconds)
+        {
+            // Update all timed modifiers
+            for (int i = 0; i < _modifiers.Count; i++)
+            {
+                if (_modifiers[i] is not ITimedModifier {IsExpired: false} timed) continue;
+                timed.UpdateTime(deltaTimeSeconds);
+                if (timed.IsExpired)
+                    MarkDirty();
+            }
+
+            // Debounced recalculation: one per tick maximum
+            if (_isDirty)
+                RecomputeAllModifiers();
+        }
+
+        private void MarkDirty()
+        {
+            _isDirty = true;
+        }
+
+        #endregion
+
+        #region IDisposable
+
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+            UnregisterTick();
+        }
+
+        #endregion
+
+        #region Private Helpers
+
+        private void EnsureSorted()
+        {
+            if (_isSorted) return;
+            _modifiers.Sort(OrderComparer);
+            _isSorted = true;
+        }
+
+        #endregion
     }
 }

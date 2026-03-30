@@ -15,15 +15,17 @@ namespace Systems.SimpleStats.Implementations
     public sealed class MultiplyModifier<TStatisticType> : IStatModifier<TStatisticType>
         where TStatisticType : StatisticBase
     {
-        public MultiplyModifier(float value)
+        public MultiplyModifier(float baseValue)
         {
-            Value = value;
+            BaseValue = baseValue;
         }
 
-        [field: SerializeField] public float Value { get; private set; }
+        [field: SerializeField] public float BaseValue { get; private set; }
+        
+        public float GetValue() => BaseValue;
         
         public int Order => (int) ModifierOrder.Multiply;
         
-        public void Apply(ref float currentFloat) => currentFloat *= Value;
+        public void Apply(ref float currentFloat) => currentFloat *= GetValue();
     }
 }

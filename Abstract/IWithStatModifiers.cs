@@ -1,13 +1,17 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using JetBrains.Annotations;
+using Systems.SimpleCore.Operations;
 using Systems.SimpleStats.Abstract.Modifiers;
+using Systems.SimpleStats.Data;
 using Systems.SimpleStats.Data.Collections;
 using Systems.SimpleStats.Data.Statistics;
+using Systems.SimpleStats.Operations;
 
 namespace Systems.SimpleStats.Abstract
 {
     /// <summary>
-    ///     Represents object that can have modifiers
+    ///     Represents object that can have modifiers.
+    ///     Provides event hooks and validation for modifier operations.
     /// </summary>
     public interface IWithStatModifiers
     {
@@ -74,5 +78,50 @@ namespace Systems.SimpleStats.Abstract
                     statModifierCollection.Add(modifier);
             }
         }
+
+        #region Validation
+
+        /// <summary>
+        ///     Override to add custom validation logic for modifier addition.
+        ///     Return a success result to allow, or an error result to deny.
+        ///     Called by <see cref="StatModifierCollection.TryAddModifier"/> during Phase 2.
+        /// </summary>
+        OperationResult CanApplyModifier(in ModifierContext context) => ModifierOperations.Permitted();
+
+        #endregion
+
+        #region Events
+
+        /// <summary>
+        ///     Called when a modifier is successfully added
+        /// </summary>
+        void OnModifierAdded(in ModifierContext context, in OperationResult result) { }
+
+        /// <summary>
+        ///     Called when adding a modifier fails validation
+        /// </summary>
+        void OnModifierAddFailed(in ModifierContext context, in OperationResult result) { }
+
+        /// <summary>
+        ///     Called when a modifier is successfully removed
+        /// </summary>
+        void OnModifierRemoved(in ModifierContext context, in OperationResult result) { }
+
+        /// <summary>
+        ///     Called when removing a modifier fails
+        /// </summary>
+        void OnModifierRemoveFailed(in ModifierContext context, in OperationResult result) { }
+
+        /// <summary>
+        ///     Called when a timed modifier expires and is auto-removed
+        /// </summary>
+        void OnModifierExpired(in ModifierContext context, in OperationResult result) { }
+
+        /// <summary>
+        ///     Called when recalculation completes successfully
+        /// </summary>
+        void OnRecomputeComplete(in OperationResult result) { }
+
+        #endregion
     }
 }

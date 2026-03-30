@@ -15,15 +15,17 @@ namespace Systems.SimpleStats.Implementations
     public sealed class FinalAddModifier<TStatisticType> : IStatModifier<TStatisticType>
         where TStatisticType : StatisticBase
     {
-        public FinalAddModifier(float value)
+        public FinalAddModifier(float baseValue)
         {
-            Value = value;
+            BaseValue = baseValue;
         }
 
-        [field: SerializeField] public float Value { get; private set; }
+        [field: SerializeField] public float BaseValue { get; private set; }
+        
+        public float GetValue() => BaseValue;
         
         public int Order => (int) ModifierOrder.FinalAdd;
         
-        public void Apply(ref float currentFloat) => currentFloat += Value;
+        public void Apply(ref float currentFloat) => currentFloat += GetValue();
     }
 }
