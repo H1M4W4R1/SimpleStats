@@ -301,14 +301,14 @@ namespace Systems.SimpleStats.Data.Collections
         private void RegisterTick()
         {
             if (_isTickRegistered) return;
-            TickSystem.OnTick += OnTick;
+            TickSystem.RegisterHandler(OnTick);
             _isTickRegistered = true;
         }
 
         private void UnregisterTick()
         {
             if (!_isTickRegistered) return;
-            TickSystem.OnTick -= OnTick;
+            TickSystem.UnregisterHandler(OnTick);
             _isTickRegistered = false;
         }
 
