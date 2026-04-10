@@ -3,7 +3,6 @@ using Systems.SimpleStats.Abstract.Modifiers;
 using Systems.SimpleStats.Data;
 using Systems.SimpleStats.Data.Statistics;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace Systems.SimpleStats.Implementations.ConditionalModifiers
 {

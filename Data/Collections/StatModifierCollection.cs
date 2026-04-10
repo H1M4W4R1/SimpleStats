@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using JetBrains.Annotations;
 using Systems.SimpleCore.Operations;
-using Systems.SimpleCore.Timing;
 using Systems.SimpleCore.Utility.Enums;
 using Systems.SimpleStats.Abstract;
 using Systems.SimpleStats.Abstract.Modifiers;
@@ -11,13 +9,13 @@ using Systems.SimpleStats.Operations;
 namespace Systems.SimpleStats.Data.Collections
 {
     /// <summary>
-    ///     Collection of stat modifiers with validation, events, timed modifier support,
-    ///     and per-tick debounced recalculation via TickSystem.
+    ///     Collection of stat modifiers with validation, events, and expiry support.
     ///     Events and validation are delegated to the <see cref="IWithStatModifiers"/> owner.
+    ///     Timed modifier updates are the responsibility of the owning entity.
     ///     Note: This collection is not thread-safe. Callers must synchronize externally
     ///     if concurrent access is needed.
     /// </summary>
-    public sealed class StatModifierCollection : IDisposable
+    public sealed class StatModifierCollection
     {
         /// <summary>
         ///     Cached comparer to avoid delegate allocation on every sort
@@ -40,24 +38,8 @@ namespace Systems.SimpleStats.Data.Collections
         /// </summary>
         private bool _isSorted = true;
 
-        /// <summary>
-        ///     Dirty flag for debounced recalculation
-        /// </summary>
-        private bool _isDirty;
-
-        /// <summary>
-        ///     Whether this collection is subscribed to TickSystem
-        /// </summary>
-        private bool _isTickRegistered;
-
-        /// <summary>
-        ///     Whether this collection has been disposed
-        /// </summary>
-        private bool _isDisposed;
-
         public StatModifierCollection()
         {
-            RegisterTick();
         }
 
         /// <summary>
@@ -67,7 +49,6 @@ namespace Systems.SimpleStats.Data.Collections
         public StatModifierCollection([CanBeNull] IWithStatModifiers owner)
         {
             _owner = owner;
-            RegisterTick();
         }
 
         /// <summary>
@@ -79,7 +60,6 @@ namespace Systems.SimpleStats.Data.Collections
             _owner = owner;
             _modifiers.AddRange(modifiers);
             _isSorted = false;
-            RegisterTick();
         }
 
         /// <summary>
@@ -127,6 +107,7 @@ namespace Systems.SimpleStats.Data.Collections
             ActionSource actionSource = ActionSource.External)
         {
             // Phase 1: Parameter validation
+            // Note: no OnModifierAddFailed event here — ModifierContext requires a non-null modifier.
             if (ReferenceEquals(modifier, null))
                 return ModifierOperations.ModifierIsNull();
 
@@ -158,7 +139,6 @@ namespace Systems.SimpleStats.Data.Collections
             // Execute
             _modifiers.Add(modifier);
             _isSorted = false;
-            MarkDirty();
 
             OperationResult result = ModifierOperations.ModifierAdded();
 
@@ -191,8 +171,6 @@ namespace Systems.SimpleStats.Data.Collections
                 return notFound;
             }
 
-            MarkDirty();
-
             OperationResult result = ModifierOperations.ModifierRemoved();
 
             // Phase 3: Events
@@ -211,7 +189,6 @@ namespace Systems.SimpleStats.Data.Collections
             if (ReferenceEquals(modifier, null)) return;
             _modifiers.Add(modifier);
             _isSorted = false;
-            MarkDirty();
         }
 
         /// <summary>
@@ -221,9 +198,7 @@ namespace Systems.SimpleStats.Data.Collections
         public bool Remove([CanBeNull] IStatModifier modifier)
         {
             if (ReferenceEquals(modifier, null)) return false;
-            bool removed = _modifiers.Remove(modifier);
-            if (removed) MarkDirty();
-            return removed;
+            return _modifiers.Remove(modifier);
         }
 
         /// <summary>
@@ -233,7 +208,6 @@ namespace Systems.SimpleStats.Data.Collections
         {
             _modifiers.Clear();
             _isSorted = true;
-            MarkDirty();
         }
 
         /// <summary>
@@ -241,14 +215,17 @@ namespace Systems.SimpleStats.Data.Collections
         /// </summary>
         public void AddRange([NotNull] IEnumerable<IStatModifier> modifiers)
         {
-            _modifiers.AddRange(modifiers);
+            foreach (IStatModifier modifier in modifiers)
+            {
+                if (modifier == null) continue;
+                _modifiers.Add(modifier);
+            }
             _isSorted = false;
-            MarkDirty();
         }
 
         /// <summary>
-        ///     Recalculates active modifiers: removes expired timed modifiers,
-        ///     clears the dirty flag. Called automatically by TickSystem when dirty.
+        ///     Removes expired timed modifiers and fires expiry events.
+        ///     Should be called by the owning entity after updating timed modifiers.
         /// </summary>
         public OperationResult RecomputeAllModifiers()
         {
@@ -256,7 +233,7 @@ namespace Systems.SimpleStats.Data.Collections
             for (int i = _modifiers.Count - 1; i >= 0; i--)
             {
                 if (_modifiers[i] is not ITimedModifier {IsExpired: true}) continue;
-                
+
                 IStatModifier modifier = _modifiers[i];
                 _modifiers.RemoveAt(i);
 
@@ -265,8 +242,6 @@ namespace Systems.SimpleStats.Data.Collections
                 OperationResult expiredResult = ModifierOperations.ModifierRemoved();
                 _owner.OnModifierExpired(in context, in expiredResult);
             }
-
-            _isDirty = false;
 
             OperationResult result = ModifierOperations.RecomputeComplete();
             _owner?.OnRecomputeComplete(in result);
@@ -295,56 +270,6 @@ namespace Systems.SimpleStats.Data.Collections
                 output.Add(modifier);
             }
         }
-
-        #region TickSystem Integration
-
-        private void RegisterTick()
-        {
-            if (_isTickRegistered) return;
-            TickSystem.RegisterHandler(OnTick);
-            _isTickRegistered = true;
-        }
-
-        private void UnregisterTick()
-        {
-            if (!_isTickRegistered) return;
-            TickSystem.UnregisterHandler(OnTick);
-            _isTickRegistered = false;
-        }
-
-        private void OnTick(float deltaTimeSeconds)
-        {
-            // Update all timed modifiers
-            for (int i = 0; i < _modifiers.Count; i++)
-            {
-                if (_modifiers[i] is not ITimedModifier {IsExpired: false} timed) continue;
-                timed.UpdateTime(deltaTimeSeconds);
-                if (timed.IsExpired)
-                    MarkDirty();
-            }
-
-            // Debounced recalculation: one per tick maximum
-            if (_isDirty)
-                RecomputeAllModifiers();
-        }
-
-        private void MarkDirty()
-        {
-            _isDirty = true;
-        }
-
-        #endregion
-
-        #region IDisposable
-
-        public void Dispose()
-        {
-            if (_isDisposed) return;
-            _isDisposed = true;
-            UnregisterTick();
-        }
-
-        #endregion
 
         #region Private Helpers
 

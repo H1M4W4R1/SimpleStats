@@ -1,7 +1,7 @@
 namespace Systems.SimpleStats.Abstract.Modifiers
 {
     /// <summary>
-    ///     Modifier with a limited duration. Time is updated via the TickSystem
+    ///     Modifier with a limited duration. Time is updated by the owning entity
     ///     and expired modifiers are automatically removed during recalculation.
     /// </summary>
     public interface ITimedModifier : IStatModifier
@@ -22,7 +22,7 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         bool IsExpired => TimeRemaining <= 0f;
 
         /// <summary>
-        ///     Advances the modifier's internal timer. Called by TickSystem each tick.
+        ///     Advances the modifier's internal timer. Called by the owning entity each tick.
         /// </summary>
         /// <param name="deltaTime">Elapsed time in seconds</param>
         void UpdateTime(float deltaTime) => TimeRemaining -= deltaTime;

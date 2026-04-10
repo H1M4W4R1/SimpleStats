@@ -20,7 +20,7 @@ namespace Systems.SimpleStats.Implementations.TimedConditionalModifiers
         [field: SerializeField] public float BaseValue { get; private set; }
         [field: SerializeField] public float TotalDuration { get; private set; }
         
-        public float GetValue() => BaseValue;
+        public virtual float GetValue() => BaseValue;
 
         public TimedConditionalFlatAddModifier(float baseValue, float duration)
         {
