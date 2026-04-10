@@ -28,7 +28,7 @@ A flexible, performance-optimized stat and modifier system for Unity. SimpleStat
 
 ### 1. Define a Statistic
 
-Create a concrete statistic by inheriting from `StatisticBase`:
+Create a concrete statistic by inheriting from `StatisticBase`. The `[AutoCreate]` attribute is already declared on the base class, so all subclasses are automatically registered with `StatsDatabase`:
 
 ```csharp
 using Systems.SimpleStats.Data.Statistics;
@@ -42,8 +42,6 @@ public class HealthStat : StatisticBase
     }
 }
 ```
-
-Tag it with `[AutoCreate("Statistics", "SimpleStats.Statistics")]` to register with `StatsDatabase`.
 
 ### 2. Create a Modifier Target
 
@@ -88,12 +86,12 @@ public class CharacterStats : MonoBehaviour, IWithStatModifiers
 Modifiers can be instantiated and added to a collection:
 
 ```csharp
-// Create a flat health bonus
+// Create a flat health bonus (+10)
 var flatBonus = new FlatAddModifier<HealthStat>(10);
 _modifiers.TryAddModifier(flatBonus);
 
-// Create a timed buff (5 seconds)
-var timedBuff = new TimedFlatAddModifier<HealthStat>(5, 20);
+// Create a timed flat buff (+20 for 5 seconds)
+var timedBuff = new TimedFlatAddModifier<HealthStat>(20, 5);
 _modifiers.TryAddModifier(timedBuff);
 
 // Calculate final stat value
@@ -118,6 +116,8 @@ private void Update()
     // Remove expired modifiers and fire events
     _modifiers.RecomputeAllModifiers();
 }
+
+// Or preferably use Tick System from SimpleCore
 ```
 
 ## Modifier Types
@@ -127,25 +127,27 @@ private void Update()
 Modifiers execute in a defined order to ensure consistent results:
 
 1. **FlatAdd** (`ModifierOrder.FlatAdd`) – Added to base value
-2. **PercentageAdd** (`ModifierOrder.PercentageAdd`) – Percentage of value after flat adds
-3. **Multiply** (`ModifierOrder.Multiply`) – Multiplicative scaling
-4. **PercentageFinalAdd** (`ModifierOrder.PercentageFinalAdd`) – Percentage after multiplication
-5. **FinalAdd** (`ModifierOrder.FinalAdd`) – Added to final calculated value
+2. **PercentageAdd** (`ModifierOrder.PercentageAdd`) – Adds a percentage of the value after flat adds (0.1 = +10%)
+3. **Multiply** (`ModifierOrder.Multiply`) – Multiplicative scaling (1.5 = ×1.5)
+4. **PercentageFinalAdd** (`ModifierOrder.PercentageFinalAdd`) – Adds a percentage after multiplication (0.1 = +10%)
+5. **FinalAdd** (`ModifierOrder.FinalAdd`) – Added to the final calculated value
 
 ### Built-in Implementations
 
 **Standard Modifiers:**
 - `FlatAddModifier<T>` – Adds a fixed amount
-- `PercentageAddModifier<T>` – Adds a percentage
-- `MultiplyModifier<T>` – Multiplies value
+- `PercentageAddModifier<T>` – Adds a percentage of the current value (0.1 = +10%)
+- `MultiplyModifier<T>` – Multiplies value (1.5 = ×1.5)
 - `PercentageFinalAddModifier<T>` – Adds percentage after multiplication
 - `FinalAddModifier<T>` – Adds to final value
 
 **Timed Variants:** `Timed[Type]Modifier<T>` – Any modifier with duration tracking
 
-**Conditional Variants:** `Conditional[Type]Modifier<T>` – Modifiers that check `ShouldApply()`
+**Conditional Variants:** `Conditional[Type]Modifier<T>` – Abstract base classes; override `ShouldApply()` to define the condition
 
-Example: `TimedConditionalFlatAddModifier<HealthStat>` combines timing and conditional logic.
+**Timed+Conditional Variants:** `TimedConditional[Type]Modifier<T>` – Combines timing and conditional logic; also abstract
+
+Example: `TimedConditionalFlatAddModifier<HealthStat>` requires a concrete subclass overriding `ShouldApply()`.
 
 ## Validation and Events
 
@@ -179,7 +181,7 @@ Subscribe to modifier lifecycle events:
 
 ### Custom Modifiers
 
-Implement `IStatModifier<T>` for custom logic:
+Implement `IStatModifier<T>` for fully custom logic:
 
 ```csharp
 public class DamageResistanceModifier : IStatModifier<DamageStat>
@@ -192,7 +194,6 @@ public class DamageResistanceModifier : IStatModifier<DamageStat>
 
     public void Apply(ref float currentFloat)
     {
-        // Apply resistance scaling
         currentFloat *= (1f - Mathf.Clamp01(_resistance));
     }
 }
@@ -200,22 +201,43 @@ public class DamageResistanceModifier : IStatModifier<DamageStat>
 
 ### Conditional Modifiers
 
-Implement `IConditionalModifier` to gate application:
+Conditional modifier variants are abstract base classes. Create a concrete subclass and override `ShouldApply()`:
 
 ```csharp
-public class BerserkDamageModifier : IStatModifier<DamageStat>, IConditionalModifier
+public class BerserkDamageModifier : ConditionalMultiplyModifier<DamageStat>
 {
-    public int Order => (int)ModifierOrder.Multiply;
+    private readonly Character _character;
 
-    public void Apply(ref float damage) => damage *= 1.5f;
-
-    public bool ShouldApply(in ModifierContext context)
+    public BerserkDamageModifier(Character character) : base(1.5f)
     {
-        // Only apply when health is below 25%
-        return character.CurrentHealth < character.MaxHealth * 0.25f;
+        _character = character;
     }
+
+    // Only applies when health is below 25%
+    public override bool ShouldApply(in ModifierContext context)
+        => _character.CurrentHealth < _character.MaxHealth * 0.25f;
 }
 ```
+
+### Modifier Source Tracking
+
+Implement `IModifierSource<T>` on a modifier to track its origin (useful for debugging or removing all modifiers from a specific source):
+
+```csharp
+public class WeaponFlatAddModifier : FlatAddModifier<DamageStat>, IModifierSource<WeaponItem>
+{
+    private readonly WeaponItem _weapon;
+
+    public WeaponFlatAddModifier(WeaponItem weapon, float bonus) : base(bonus)
+    {
+        _weapon = weapon;
+    }
+
+    public WeaponItem GetSource() => _weapon;
+}
+```
+
+> Using structs or identifiers as sources is preferred as it improves system serializability.
 
 ### Filtering Modifiers
 
@@ -226,6 +248,10 @@ Get modifiers for a specific statistic:
 var healthModifiers = new List<IStatModifier>();
 character.GetAllModifiersFor<HealthStat>(healthModifiers);
 
+// Get only currently active modifiers (non-expired, conditions met)
+var active = new List<IStatModifier>();
+_modifiers.GetActiveModifiers(active);
+
 // Transfer modifiers to another collection
 var targetCollection = new StatModifierCollection();
 character.TransferModifiersTo<DamageStat>(targetCollection);
@@ -235,7 +261,7 @@ character.TransferModifiersTo<DamageStat>(targetCollection);
 
 - **Caching**: Implement `GetAllModifiers()` with caching to avoid repeated allocations
 - **Lazy sorting**: Collections sort only when needed (on `Apply()`)
-- **Zero-allocation contexts**: `ModifierContext` is a ref struct
+- **Zero-allocation contexts**: `ModifierContext` is a readonly ref struct
 - **Pooling**: Consider object pooling `StatModifierCollection` for frequently-created instances
 - **Batch updates**: Update timed modifiers once per frame, not per-modifier
 
