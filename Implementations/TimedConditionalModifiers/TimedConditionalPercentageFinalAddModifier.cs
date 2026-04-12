@@ -21,8 +21,8 @@ namespace Systems.SimpleStats.Implementations.TimedConditionalModifiers
         [field: SerializeField] public float TotalDuration { get; private set; }
 
         public virtual float GetValue() => BaseValue;
-        
-        public TimedConditionalPercentageFinalAddModifier(float baseValue, float duration)
+
+        protected TimedConditionalPercentageFinalAddModifier(float baseValue, float duration)
         {
             BaseValue = baseValue;
             TotalDuration = duration;

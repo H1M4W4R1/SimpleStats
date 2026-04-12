@@ -26,7 +26,7 @@ namespace Systems.SimpleStats.Data.Collections
         /// <summary>
         ///     Internal modifier storage
         /// </summary>
-        private readonly List<IStatModifier> _modifiers = new List<IStatModifier>();
+        private readonly List<IStatModifier> _modifiers = new();
 
         /// <summary>
         ///     Owner of this modifier collection, receives events and validation calls
@@ -87,7 +87,7 @@ namespace Systems.SimpleStats.Data.Collections
 
                 if (modifier is IConditionalModifier conditional)
                 {
-                    ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                    ModifierContext context = new(modifier, _owner, ActionSource.Internal);
                     if (!conditional.ShouldApply(in context))
                         continue;
                 }
@@ -111,18 +111,18 @@ namespace Systems.SimpleStats.Data.Collections
             if (ReferenceEquals(modifier, null))
                 return ModifierOperations.ModifierIsNull();
 
-            if (modifier is ITimedModifier timed && timed.IsExpired)
+            if (modifier is ITimedModifier {IsExpired: true})
             {
                 OperationResult expired = ModifierOperations.ModifierExpired();
                 if (actionSource == ActionSource.External && _owner != null)
                 {
-                    ModifierContext expiredContext = new ModifierContext(modifier, _owner, actionSource);
+                    ModifierContext expiredContext = new(modifier, _owner, actionSource);
                     _owner.OnModifierAddFailed(in expiredContext, in expired);
                 }
                 return expired;
             }
 
-            ModifierContext context = new ModifierContext(modifier, _owner, actionSource);
+            ModifierContext context = new(modifier, _owner, actionSource);
 
             // Phase 2: Business logic validation (delegated to owner)
             if (_owner != null)
@@ -160,7 +160,7 @@ namespace Systems.SimpleStats.Data.Collections
             if (ReferenceEquals(modifier, null))
                 return ModifierOperations.ModifierIsNull();
 
-            ModifierContext context = new ModifierContext(modifier, _owner, actionSource);
+            ModifierContext context = new(modifier, _owner, actionSource);
 
             // Execute
             if (!_modifiers.Remove(modifier))
@@ -238,7 +238,7 @@ namespace Systems.SimpleStats.Data.Collections
                 _modifiers.RemoveAt(i);
 
                 if (_owner == null) continue;
-                ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                ModifierContext context = new(modifier, _owner, ActionSource.Internal);
                 OperationResult expiredResult = ModifierOperations.ModifierRemoved();
                 _owner.OnModifierExpired(in context, in expiredResult);
             }
@@ -262,7 +262,7 @@ namespace Systems.SimpleStats.Data.Collections
 
                 if (modifier is IConditionalModifier conditional)
                 {
-                    ModifierContext context = new ModifierContext(modifier, _owner, ActionSource.Internal);
+                    ModifierContext context = new(modifier, _owner, ActionSource.Internal);
                     if (!conditional.ShouldApply(in context))
                         continue;
                 }

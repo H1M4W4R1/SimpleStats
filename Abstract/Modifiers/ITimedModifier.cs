@@ -1,3 +1,5 @@
+using JetBrains.Annotations;
+
 namespace Systems.SimpleStats.Abstract.Modifiers
 {
     /// <summary>
@@ -14,7 +16,7 @@ namespace Systems.SimpleStats.Abstract.Modifiers
         /// <summary>
         ///     Total duration this modifier was created with
         /// </summary>
-        float TotalDuration { get; }
+        [UsedImplicitly] float TotalDuration { get; }
 
         /// <summary>
         ///     True when <see cref="TimeRemaining"/> has reached zero or below
