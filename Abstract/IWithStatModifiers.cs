@@ -11,7 +11,7 @@ namespace Systems.SimpleStats.Abstract
 {
     /// <summary>
     ///     Represents object that can have modifiers.
-    ///     Provides event hooks and validation for modifier operations.
+    ///     Provides callback hooks and validation for modifier operations.
     /// </summary>
     public interface IWithStatModifiers
     {
@@ -90,7 +90,7 @@ namespace Systems.SimpleStats.Abstract
 
         #endregion
 
-        #region Events
+        #region Callbacks
 
         /// <summary>
         ///     Called when a modifier is successfully added

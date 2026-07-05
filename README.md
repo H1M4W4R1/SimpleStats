@@ -7,7 +7,7 @@ A flexible, performance-optimized stat and modifier system for Unity. SimpleStat
 - **Modular modifier system**: Chain multiple modifier types with well-defined execution order
 - **Timed modifiers**: Automatic expiry and cleanup of duration-based buffs/debuffs
 - **Conditional modifiers**: Dynamic enable/disable based on game state
-- **Event hooks**: Respond to modifier additions, removals, and expirations
+- **Callback hooks**: Respond to modifier additions, removals, and expirations
 - **Zero-allocation design**: Uses ref structs for validation contexts to minimize GC pressure
 - **Addressable integration**: Auto-load statistics from addressable assets with `StatsDatabase`
 
@@ -45,10 +45,11 @@ public class HealthStat : StatisticBase
 
 ### 2. Create a Modifier Target
 
-Implement `IWithStatModifiers` to receive modifier events:
+Implement `IWithStatModifiers` to receive modifier callbacks:
 
 ```csharp
 using Systems.SimpleStats.Abstract;
+using Systems.SimpleStats.Abstract.Modifiers;
 using Systems.SimpleStats.Data.Collections;
 using Systems.SimpleStats.Data;
 using Systems.SimpleCore.Operations;
@@ -72,7 +73,7 @@ public class CharacterStats : MonoBehaviour, IWithStatModifiers
         return ModifierOperations.Permitted();
     }
 
-    // Optional: events for UI/logging
+    // Optional: callbacks for UI/logging
     public void OnModifierAdded(in ModifierContext context, in OperationResult result)
         => Debug.Log($"Buff applied: {context.modifier}");
 
@@ -87,15 +88,15 @@ Modifiers can be instantiated and added to a collection:
 
 ```csharp
 // Create a flat health bonus (+10)
-var flatBonus = new FlatAddModifier<HealthStat>(10);
+FlatAddModifier<HealthStat> flatBonus = new FlatAddModifier<HealthStat>(10);
 _modifiers.TryAddModifier(flatBonus);
 
 // Create a timed flat buff (+20 for 5 seconds)
-var timedBuff = new TimedFlatAddModifier<HealthStat>(20, 5);
+TimedFlatAddModifier<HealthStat> timedBuff = new TimedFlatAddModifier<HealthStat>(20, 5);
 _modifiers.TryAddModifier(timedBuff);
 
 // Calculate final stat value
-var healthStat = StatsDatabase.GetAny<HealthStat>();
+HealthStat healthStat = StatsDatabase.GetAny<HealthStat>();
 float finalHealth = healthStat.GetFinalValue(_modifiers);
 ```
 
@@ -106,14 +107,15 @@ Timed modifiers require manual time updates:
 ```csharp
 private void Update()
 {
-    // Update each timed modifier
-    foreach (var modifier in _modifiers.Modifiers)
+    IReadOnlyList<IStatModifier> modifiers = _modifiers.Modifiers;
+    for (int index = 0; index < modifiers.Count; index++)
     {
+        IStatModifier modifier = modifiers[index];
         if (modifier is ITimedModifier timed)
             timed.UpdateTime(Time.deltaTime);
     }
 
-    // Remove expired modifiers and fire events
+    // Remove expired modifiers and fire callbacks
     _modifiers.RecomputeAllModifiers();
 }
 
@@ -135,21 +137,21 @@ Modifiers execute in a defined order to ensure consistent results:
 ### Built-in Implementations
 
 **Standard Modifiers:**
-- `FlatAddModifier<T>` – Adds a fixed amount
-- `PercentageAddModifier<T>` – Adds a percentage of the current value (0.1 = +10%)
-- `MultiplyModifier<T>` – Multiplies value (1.5 = ×1.5)
-- `PercentageFinalAddModifier<T>` – Adds percentage after multiplication
-- `FinalAddModifier<T>` – Adds to final value
+- `FlatAddModifier<TStatisticType>` – Adds a fixed amount
+- `PercentageAddModifier<TStatisticType>` – Adds a percentage of the current value (0.1 = +10%)
+- `MultiplyModifier<TStatisticType>` – Multiplies value (1.5 = ×1.5)
+- `PercentageFinalAddModifier<TStatisticType>` – Adds percentage after multiplication
+- `FinalAddModifier<TStatisticType>` – Adds to final value
 
-**Timed Variants:** `Timed[Type]Modifier<T>` – Any modifier with duration tracking
+**Timed Variants:** `Timed[Type]Modifier<TStatisticType>` – Any modifier with duration tracking
 
-**Conditional Variants:** `Conditional[Type]Modifier<T>` – Abstract base classes; override `ShouldApply()` to define the condition
+**Conditional Variants:** `Conditional[Type]Modifier<TStatisticType>` – Abstract base classes; override `ShouldApply()` to define the condition
 
-**Timed+Conditional Variants:** `TimedConditional[Type]Modifier<T>` – Combines timing and conditional logic; also abstract
+**Timed+Conditional Variants:** `TimedConditional[Type]Modifier<TStatisticType>` – Combines timing and conditional logic; also abstract
 
 Example: `TimedConditionalFlatAddModifier<HealthStat>` requires a concrete subclass overriding `ShouldApply()`.
 
-## Validation and Events
+## Validation and Callbacks
 
 ### Validation
 
@@ -166,9 +168,9 @@ public OperationResult CanApplyModifier(in ModifierContext context)
 }
 ```
 
-### Events
+### Callbacks
 
-Subscribe to modifier lifecycle events:
+Override modifier lifecycle callbacks:
 
 - `OnModifierAdded(context, result)` – Modifier successfully added
 - `OnModifierAddFailed(context, result)` – Addition rejected
@@ -181,7 +183,7 @@ Subscribe to modifier lifecycle events:
 
 ### Custom Modifiers
 
-Implement `IStatModifier<T>` for fully custom logic:
+Implement `IStatModifier<TStatisticType>` for fully custom logic:
 
 ```csharp
 public class DamageResistanceModifier : IStatModifier<DamageStat>
@@ -221,7 +223,7 @@ public class BerserkDamageModifier : ConditionalMultiplyModifier<DamageStat>
 
 ### Modifier Source Tracking
 
-Implement `IModifierSource<T>` on a modifier to track its origin (useful for debugging or removing all modifiers from a specific source):
+Implement `IModifierSource<TSource>` on a modifier to track its origin (useful for debugging or removing all modifiers from a specific source):
 
 ```csharp
 public class WeaponFlatAddModifier : FlatAddModifier<DamageStat>, IModifierSource<WeaponItem>
@@ -245,15 +247,15 @@ Get modifiers for a specific statistic:
 
 ```csharp
 // Get all modifiers targeting a stat type
-var healthModifiers = new List<IStatModifier>();
+List<IStatModifier> healthModifiers = new List<IStatModifier>();
 character.GetAllModifiersFor<HealthStat>(healthModifiers);
 
 // Get only currently active modifiers (non-expired, conditions met)
-var active = new List<IStatModifier>();
+List<IStatModifier> active = new List<IStatModifier>();
 _modifiers.GetActiveModifiers(active);
 
 // Transfer modifiers to another collection
-var targetCollection = new StatModifierCollection();
+StatModifierCollection targetCollection = new StatModifierCollection();
 character.TransferModifiersTo<DamageStat>(targetCollection);
 ```
 

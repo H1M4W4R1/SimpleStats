@@ -9,8 +9,8 @@ using Systems.SimpleStats.Operations;
 namespace Systems.SimpleStats.Data.Collections
 {
     /// <summary>
-    ///     Collection of stat modifiers with validation, events, and expiry support.
-    ///     Events and validation are delegated to the <see cref="IWithStatModifiers"/> owner.
+    ///     Collection of stat modifiers with validation, callbacks, and expiry support.
+    ///     Callbacks and validation are delegated to the <see cref="IWithStatModifiers"/> owner.
     ///     Timed modifier updates are the responsibility of the owning entity.
     ///     Note: This collection is not thread-safe. Callers must synchronize externally
     ///     if concurrent access is needed.
@@ -29,7 +29,7 @@ namespace Systems.SimpleStats.Data.Collections
         private readonly List<IStatModifier> _modifiers = new();
 
         /// <summary>
-        ///     Owner of this modifier collection, receives events and validation calls
+        ///     Owner of this modifier collection, receives callbacks and validation calls
         /// </summary>
         [CanBeNull] private readonly IWithStatModifiers _owner;
 
@@ -44,7 +44,7 @@ namespace Systems.SimpleStats.Data.Collections
 
         /// <summary>
         ///     Creates a collection with an owner for context-aware operations.
-        ///     The owner receives all events and validation calls.
+        ///     The owner receives all callbacks and validation calls.
         /// </summary>
         public StatModifierCollection([CanBeNull] IWithStatModifiers owner)
         {
@@ -100,14 +100,14 @@ namespace Systems.SimpleStats.Data.Collections
         ///     Add modifier with full three-phase validation.
         ///     Phase 1: Parameter validation (null, expired).
         ///     Phase 2: Business logic via <see cref="IWithStatModifiers.CanApplyModifier"/>.
-        ///     Phase 3: Event dispatch on success/failure.
+        ///     Phase 3: Callback dispatch on success/failure.
         /// </summary>
         public OperationResult TryAddModifier(
             [CanBeNull] IStatModifier modifier,
             ActionSource actionSource = ActionSource.External)
         {
             // Phase 1: Parameter validation
-            // Note: no OnModifierAddFailed event here — ModifierContext requires a non-null modifier.
+            // Note: no OnModifierAddFailed callback here because ModifierContext requires a non-null modifier.
             if (ReferenceEquals(modifier, null))
                 return ModifierOperations.ModifierIsNull();
 
@@ -142,7 +142,7 @@ namespace Systems.SimpleStats.Data.Collections
 
             OperationResult result = ModifierOperations.ModifierAdded();
 
-            // Phase 3: Events
+            // Phase 3: Callbacks
             if (actionSource == ActionSource.External && _owner != null)
                 _owner.OnModifierAdded(in context, in result);
 
@@ -150,7 +150,7 @@ namespace Systems.SimpleStats.Data.Collections
         }
 
         /// <summary>
-        ///     Remove modifier with validation and events
+        ///     Remove modifier with validation and callbacks
         /// </summary>
         public OperationResult TryRemoveModifier(
             [CanBeNull] IStatModifier modifier,
@@ -173,7 +173,7 @@ namespace Systems.SimpleStats.Data.Collections
 
             OperationResult result = ModifierOperations.ModifierRemoved();
 
-            // Phase 3: Events
+            // Phase 3: Callbacks
             if (actionSource == ActionSource.External && _owner != null)
                 _owner.OnModifierRemoved(in context, in result);
 
@@ -192,7 +192,7 @@ namespace Systems.SimpleStats.Data.Collections
         }
 
         /// <summary>
-        ///     Remove modifier without events (legacy compatibility).
+        ///     Remove modifier without callbacks (legacy compatibility).
         ///     Prefer <see cref="TryRemoveModifier"/> for new code.
         /// </summary>
         public bool Remove([CanBeNull] IStatModifier modifier)
@@ -215,16 +215,40 @@ namespace Systems.SimpleStats.Data.Collections
         /// </summary>
         public void AddRange([NotNull] IEnumerable<IStatModifier> modifiers)
         {
-            foreach (IStatModifier modifier in modifiers)
+            if (modifiers is IReadOnlyList<IStatModifier> readOnlyList)
             {
-                if (modifier == null) continue;
-                _modifiers.Add(modifier);
+                for (int index = 0; index < readOnlyList.Count; index++)
+                {
+                    IStatModifier modifier = readOnlyList[index];
+                    if (ReferenceEquals(modifier, null)) continue;
+                    _modifiers.Add(modifier);
+                }
             }
+            else if (modifiers is IList<IStatModifier> list)
+            {
+                for (int index = 0; index < list.Count; index++)
+                {
+                    IStatModifier modifier = list[index];
+                    if (ReferenceEquals(modifier, null)) continue;
+                    _modifiers.Add(modifier);
+                }
+            }
+            else
+            {
+                using IEnumerator<IStatModifier> enumerator = modifiers.GetEnumerator();
+                while (enumerator.MoveNext())
+                {
+                    IStatModifier modifier = enumerator.Current;
+                    if (ReferenceEquals(modifier, null)) continue;
+                    _modifiers.Add(modifier);
+                }
+            }
+
             _isSorted = false;
         }
 
         /// <summary>
-        ///     Removes expired timed modifiers and fires expiry events.
+        ///     Removes expired timed modifiers and fires expiry callbacks.
         ///     Should be called by the owning entity after updating timed modifiers.
         /// </summary>
         public OperationResult RecomputeAllModifiers()
