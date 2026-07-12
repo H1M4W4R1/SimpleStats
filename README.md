@@ -267,6 +267,12 @@ character.TransferModifiersTo<DamageStat>(targetCollection);
 - **Pooling**: Consider object pooling `StatModifierCollection` for frequently-created instances
 - **Batch updates**: Update timed modifiers once per frame, not per-modifier
 
+## Examples included
+
+- `Scene - Stats.unity`: exposes runtime Unity UI for flat, percentage, timed, recompute, reset, and full modifier-flow cases.
+- `ExampleStatOwner`: scene driver and sample `IWithStatModifiers` implementation with live final-health status.
+- `ExampleHealthStatistic`: sample statistic definition used by the scene.
+
 ## License
 
 See [LICENSE.md](LICENSE.md) in this directory.
